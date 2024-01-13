@@ -72,8 +72,7 @@ def message_func(text, is_user=False, is_df=False):
             )
             st.write(text)
             return
-        else:
-            text = format_message(text)
+        
 
         st.write(
             f"""
@@ -130,7 +129,7 @@ def message_func_stream(text, placeholder, url, is_df=False):
             f"""
                 <div style="display: flex; align-items: center; margin-bottom: 10px; justify-content: {message_alignment};">
                     <img src="{avatar_url}" class="{avatar_class}" alt="avatar" style="width: 50px; height: 50px;" />
-                    <div style="background: {message_bg_color}; color: white; border-radius: 20px; padding: 10px; margin-right: 5px; max-width: 75%; font-size: 14px;">
+                    <div style="background: {message_bg_color}; color: white; border-radius: 20px; padding: 10px; margin-right: 5px; max-width: 75%;">
                         {text} \n </div>
                 </div>
                 """,
@@ -165,12 +164,12 @@ class StreamlitUICallbackHandler(BaseCallbackHandler):
         message_alignment = "flex-start"
         message_bg_color = "#71797E"
         avatar_class = "bot-avatar"
-        formatted_text = format_message(text)
+    
         container_content = f"""
             <div style="display: flex; align-items: center; margin-bottom: 10px; justify-content: {message_alignment};">
                 <img src="{avatar_url}" class="{avatar_class}" alt="avatar" style="width: 50px; height: 50px;" />
                 <div style="background: {message_bg_color}; color: white; border-radius: 20px; padding: 10px; margin-right: 5px; max-width: 75%; font-size: 14px;">
-                    {formatted_text} \n </div>
+                    {text} \n </div>
             </div>
         """
         return container_content
