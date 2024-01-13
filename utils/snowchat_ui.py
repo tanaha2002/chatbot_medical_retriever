@@ -115,7 +115,7 @@ def message_func_stream(text, placeholder, url, is_df=False):
                             overflow: hidden;
                         " onmouseover="this.style.boxShadow='5px 5px 15px rgba(0, 0, 0, 0.2)'; this.style.transform='scale(1.05)';" onmouseout="this.style.boxShadow='2px 2px 10px rgba(0, 0, 0, 0.1)'; this.style.transform='scale(1)';">
                             <img src="{thumbnail_url}" alt="Thumbnail" style="width: 100%; height: 100%; border-radius: 5px;"/>
-                            <p style="margin-top: 10px; color: #333; font-weight: bold;">{title}</p>
+                            <p style="margin-top: 10px; color: #333;">{title}</p>
                         </div>
                     </a>
                     </div>
