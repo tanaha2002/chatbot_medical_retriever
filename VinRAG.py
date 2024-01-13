@@ -287,6 +287,31 @@ class VinmecRetriever:
         )
         return engine
         
-    
+    def behavior_controller(self, question,rag_type):
+        """_summary_
+        Behavior controller for chatbot
+
+        Returns:
+            _type_: _string_
+        """
+        behavior_prompt = """
+        You are a helpful assistant that determines the type of query and response.  
+        Always respond in Vietnamese.
+        If the query is a greeting: Respond with a friendly greeting to the user.
+        If the query is a thank you: Respond with a friendly thank you to the user.  
+        If the query is about a health issue: Respond with `SEARCH + short the main task of query need to answer`.
+        If the query is asking who you are: Respond you are chatbot assistant of Vinmec hospital.
+        If the query contain subquery: Respond `SEARCH + combine all to one query`.
+        If the query contain greeting and subquery: Respond `SEARCH + combine all to one query`.
+        Query: {query}
+        """
+        query_ = PromptTemplate(behavior_prompt)
+        response = self.llm.predict(query_, query= question)
+        
+        behavior = response.split("\n")[-1]
+        if "SEARCH" in behavior:
+            return rag_type(behavior.replace("SEARCH ",""))
+        else:
+            return behavior
 
 

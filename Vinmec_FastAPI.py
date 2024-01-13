@@ -21,7 +21,8 @@ def generate_stream(question, retriever_func):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     def generate():
-        response_stream = retriever_func(question)
+        # response_stream = retriever_func(question)
+        response_stream = vinmec_engine.behavior_controller(question, retriever_func)
         if response_stream:
             for response in response_stream:
                 yield response
