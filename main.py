@@ -46,7 +46,7 @@ options = [
 model = st.radio(
     "",
     options=[option for option in options],  # Display only the option texts
-    index=0,
+    index=1,
     format_func=lambda option: option[0],  # Display only the option text
     horizontal=True,
 )
