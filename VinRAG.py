@@ -227,24 +227,6 @@ class VinmecRetriever:
         )
         return query_engine_
     
-    def hybrid_retriever_engine_2(self, question):
-        """_summary_
-        Using hybrid search in pgvector for searching retriever from database
-        
-        Returns:
-            full_answer: _string_
-            full_source: _string_
-        """
-        answer = self.hybrid_engine.query(question)
-        full_answer = ''
-        full_source = 'Tài liệu liên quan: \n'
-        for text in answer.response_gen:
-            print(text, end="", flush=True)
-            full_answer += text
-        for node in answer.source_nodes:
-            full_source += '\n' + node.metadata['url'] + '\n'
-            print("\n", node.metadata['url'])
-        return full_answer,full_source
     
     def hybrid_retriever_engine(self, question,):
         """_summary_

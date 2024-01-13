@@ -4,7 +4,7 @@ import streamlit as st
 # URL where your FastAPI application is running
 api_url = st.secrets['api_url']
 def test_api():
-    question = "Chao ban"  
+    question = "im sick"  
     response = requests.get(f"{api_url}/chat_engine_2", params={"question": question}, stream=True)
     if response.status_code == 200:
         for chunk in response.iter_content(chunk_size=None):

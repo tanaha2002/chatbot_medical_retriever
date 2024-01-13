@@ -39,7 +39,7 @@ chat_history = []
 st.title("Vinmec Retrieval")
 st.caption("Hỏi đáp dựa trên nguồn dữ liệu của Vinmec")
 options = [
-    ("✨ Chat Engine 1", "chat_engine"),
+    # ("✨ Chat Engine 1", "chat_engine"),
     ("♾️ Chat Engine 2", "chat_engine_2"),
     ("⛰️ Hybrid Engine", "hybrid_engine")
 ]
@@ -169,6 +169,7 @@ print(st.session_state["model"][1])
 if st.session_state.messages[-1]["role"] != "assistant":
     content = st.session_state.messages[-1]["content"]
     if isinstance(content,str):
+
         response,source = get_response(content, st.session_state["model"][1])
         if source:
             append_message(source)
