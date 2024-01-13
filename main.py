@@ -170,7 +170,8 @@ if st.session_state.messages[-1]["role"] != "assistant":
     content = st.session_state.messages[-1]["content"]
     if isinstance(content,str):
         response,source = get_response(content, st.session_state["model"][1])
-        append_message(source)
+        if source:
+            append_message(source)
         append_message(response)
         
         
