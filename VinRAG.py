@@ -208,7 +208,7 @@ class VinmecRetriever:
         
     
     #another method implement for retriever instead of chat engine
-    def retriever_query_engine(self, k=1,ivfflat_probes=1,hnsw_ef_search=40):
+    def retriever_query_engine(self, k=3,ivfflat_probes=2,hnsw_ef_search=40):
         """_summary_
         Using hybrid search in pgvector for searching retriever from database
         
@@ -217,7 +217,7 @@ class VinmecRetriever:
         """
         retriever_ = VectorIndexRetriever(
             index=self.index,
-            vector_store_query_mode="hybrid",
+            vector_store_query_mode="default",
             similarity_top_k=k,
             vector_storage_kwargs={"ivfflat_probes":ivfflat_probes,"hnsw_ef_search": hnsw_ef_search},
         )
