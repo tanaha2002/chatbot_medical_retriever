@@ -295,5 +295,8 @@ class VinmecRetriever:
             return rag_type(behavior.replace("SEARCH ",""))
         else:
             return behavior
+        
+    def llama_docs(self,all_docs):
+        return None
 
 
