@@ -237,6 +237,7 @@ class VinmecRetriever:
             full_source: _string_
         """
         response =  self.hybrid_engine.query(question)
+        print(f'-------{response}-------')
         yield "Tài liệu liên quan: \n"
         for node in response.source_nodes:
             yield node.metadata['url']  + "\n"
@@ -289,14 +290,44 @@ class VinmecRetriever:
         """
         query_ = PromptTemplate(behavior_prompt)
         response = self.llm.predict(query_, query= question)
-        
         behavior = response.split("\n")[-1]
-        if "SEARCH" in behavior:
+        if "SEARCH" in behavior:    
             return rag_type(behavior.replace("SEARCH ",""))
         else:
             return behavior
         
-    def llama_docs(self,all_docs):
-        return None
+    def search_link(self, link):
+        query = """SELECT text
+                    FROM data_vinmec_retriever_method_1
+                    where metadata_::text ilike %s
+                    """
+        conn = psycopg2.connect(self.connection_string)
+        cur = self.conn.cursor()
+        cur.execute(query, (link,))
+        content = cur.fetchall()
+        cur.close()
+        return content
+        
+    def prompt_find_relevant_links(self, question, link_info, num_queries):
+        # link_info = []
+        # for node in response.source_nodes:
+        #     link = node.metadata['url']
+        #     content = self.search_link(link)
+        #     link_info.append({"link":link,"content":content})
+            
+        link_selection_prompt = """
+            You are an intelligent assistant with the task of searching and selecting links with the most relevant content for the given question.
+            Please provide feedback in Vietnamese.
+            When receiving a question about a health issue, examine the content of the links and select {num_queries} links with the most relevant content to the question.
+            Return the list of selected links, each on a new line.
+            Below is the question and a list of links along with their content:
+            Question: {query}
+            Link and content: {links_info}
+            List of selected links:
+            """
+        prompt = PromptTemplate(link_selection_prompt)
+        response = self.llm.predict(prompt, num_queries=num_queries, query=question, links_info=link_info)
+        return response
+    
 
 
