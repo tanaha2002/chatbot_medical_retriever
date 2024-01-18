@@ -22,6 +22,12 @@ from llama_index.query_engine.retriever_query_engine import (
 from llama_index import get_response_synthesizer
 from llama_index.prompts import PromptTemplate
 
+from llama_index.indices.postprocessor import SimilarityPostprocessor
+from llama_index.indices.postprocessor import LLMRerank
+from llama_index.indices.postprocessor import SentenceEmbeddingOptimizer
+
+from CustomRV import CustomRetriever
+
 class VinmecRetriever:
     def __init__(self, db_vector, db_root, url_pg_vector,model,api_key, table_storage_index = "vinmec_storage_index"):
         os.environ["OPENAI_API_KEY"] = api_key
@@ -34,9 +40,11 @@ class VinmecRetriever:
         self.connection_string = st.secrets['connection_string']
         self.table_storage_index = table_storage_index
         self.index = self.get_index_all()
+        self.index_1,self.list_title = self.init_index1_and_title()
         self.chat_engine_2 = self.init_engine_2()
         self.hybrid_engine = self.retriever_query_engine()
         self.hybrid_engine = self.prompt_format(self.hybrid_engine)
+        self.custom_rv = self.init_customRV()
     def connect_db(self, db_name):
         try:
             url_ = self.url_pg_vector.format(db=db_name)
@@ -58,8 +66,6 @@ class VinmecRetriever:
     
     def create_retriever_stupid(self, question,k=3):
         
-        full_response = ''
-        full_url = 'Nguồn tài liệu liên quan: \n'
         # memory = ChatMemoryBuffer.from_defaults()
         index = self.index
         query_engine = index.as_chat_engine(
@@ -219,10 +225,15 @@ class VinmecRetriever:
             index=self.index,
             vector_store_query_mode="default",
             similarity_top_k=k,
-            vector_storage_kwargs={"ivfflat_probes":ivfflat_probes,"hnsw_ef_search": hnsw_ef_search},
+            # vector_storage_kwargs={"ivfflat_probes":ivfflat_probes,"hnsw_ef_search": hnsw_ef_search},
         )
+        #adding some postprocessor
+        similar_cutoff = SimilarityPostprocessor(similarity_cutoff=0.6)
+        # sentence_optimizer = SentenceEmbeddingOptimizer(percentile_cutoff=0.3)
+        # re_ranker = LLMRerank(choice_batch_size=3,top_n = 2,service_context=self.service_context)
         query_engine_ = RetrieverQueryEngine(
             retriever=retriever_,
+            node_postprocessors=[similar_cutoff],
             response_synthesizer=get_response_synthesizer(response_mode="tree_summarize",streaming=True),
         )
         return query_engine_
@@ -291,7 +302,7 @@ class VinmecRetriever:
         query_ = PromptTemplate(behavior_prompt)
         response = self.llm.predict(query_, query= question)
         behavior = response.split("\n")[-1]
-        if "SEARCH" in behavior:    
+        if "SEARCH" in behavior:
             return rag_type(behavior.replace("SEARCH ",""))
         else:
             return behavior
@@ -343,4 +354,99 @@ class VinmecRetriever:
         return response
     
 
+    def init_index1_and_title(self):
+        connection_string = st.secrets['connection_string']
+        conn = psycopg2.connect(connection_string)
+        conn.autocommit = True
+        url = make_url(connection_string)
+        vector_store = PGVectorStore.from_params(
+            database=url.database,
+            host=url.host,
+            password=url.password,
+            port=url.port,
+            user=url.username,
+            table_name="vinmec_retriever_method_1",
+            embed_dim=1536, #openai embedding dim
+            
+        )
 
+        storage_context = StorageContext.from_defaults(vector_store=vector_store)
+        index = VectorStoreIndex.from_vector_store(vector_store=storage_context.vector_store)
+        
+        #get title list
+        query = "SELECT text,metadata_::json->>'url' from data_vinmec_retriever_method_1"
+
+        with self.conn.cursor() as cur:
+            list_title = []
+            cur.execute(query)
+            for row in cur:
+                list_title.append((row[1],row[0]))
+                
+        return index,list_title
+
+    def init_customRV(self):
+        vector_retriever_1 = VectorIndexRetriever(self.index_1,similarity_top_k=3)
+        vector_retriever_2 = VectorIndexRetriever(self.index,similarity_top_k=3)
+        return CustomRetriever(vector_retriever_1,vector_retriever_2)
+
+    
+    def get_customRV(self,question):
+        ans = self.custom_rv.retrieve(question)
+        list_link = []
+        for a in ans:
+            # print(a.metadata['url'])
+            list_link.append(a.metadata['url'])
+        
+        title = []
+        for i in self.list_title:
+            if i[0] in list_link:
+                title.append(i)
+        
+        title_str = "".join([f"{i + 1}. {value[1]}\n" for i, value in enumerate(title)])  
+        return title,title_str
+    
+    def decide_index_retriever(self,question,title_str):
+        query_gen_str = """
+        You are a helpful assistant that determines the index relative to query.  
+        Maybe some index contain a little the information about the query, make sure you read it carefully.
+        If you think it is useful for you, you can select it. No need to explain.
+        Always respond index number.
+        Example:
+        Query: What is the symptom of covid?
+        Information:
+        1. Covid is a disease caused by SARS-CoV-2 virus.
+        2. The most common symptoms of COVID-19 are fever, dry cough, and tiredness.
+        3. covid is done in 2023
+        4. Some people become infected.
+        Selected index: 1,2,4
+        If there noone index relative then return `None`.
+        Query: {query}\n
+        Information: \n{infor}\n
+        Selected index:
+        """
+        gen = query_gen_str.format(query=question,infor=title_str)
+        print(gen)
+        query_gen_prompt = PromptTemplate(gen)
+        llm = OpenAI(model="gpt-3.5-turbo-1106")
+        # response = llm.predict(query_gen_prompt, query= query,infor = infor)
+        response = llm.predict(query_gen_prompt)
+        
+        return response
+    
+    def get_index(self,answer,title):
+        if "Selected index" in answer:
+            answer = answer.split("Selected index:")[1].strip()
+        if answer == "None":
+            return None
+        index = [int(i) for i in answer.split(",")]
+        link_selected = [title[i-1][0] for i in index]
+        return link_selected
+    
+    def create_custom_rv(self,question):
+        title,title_str = self.get_customRV(question)
+        answer = self.decide_index_retriever(question,title_str)
+        link_selected = self.get_index(answer,title)
+        if link_selected is None:
+            return "Tôi hiện chưa được cập nhật thông tin này."
+        else:
+            return link_selected
