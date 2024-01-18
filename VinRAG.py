@@ -21,7 +21,9 @@ from llama_index.query_engine.retriever_query_engine import (
 )
 from llama_index import get_response_synthesizer
 from llama_index.prompts import PromptTemplate
-
+from llama_index.indices.postprocessor import SimilarityPostprocessor
+from llama_index.indices.postprocessor import LLMRerank
+from llama_index.indices.postprocessor import SentenceEmbeddingOptimizer
 class VinmecRetriever:
     def __init__(self, db_vector, db_root, url_pg_vector,model,api_key, table_storage_index = "vinmec_storage_index"):
         os.environ["OPENAI_API_KEY"] = api_key
@@ -219,10 +221,15 @@ class VinmecRetriever:
             index=self.index,
             vector_store_query_mode="default",
             similarity_top_k=k,
-            vector_storage_kwargs={"ivfflat_probes":ivfflat_probes,"hnsw_ef_search": hnsw_ef_search},
+            # vector_storage_kwargs={"ivfflat_probes":ivfflat_probes,"hnsw_ef_search": hnsw_ef_search},
         )
+        #adding some postprocessor
+        similar_cutoff = SimilarityPostprocessor(similarity_cutoff=0.6)
+        # sentence_optimizer = SentenceEmbeddingOptimizer(percentile_cutoff=0.3)
+        # re_ranker = LLMRerank(choice_batch_size=3,top_n = 2,service_context=self.service_context)
         query_engine_ = RetrieverQueryEngine(
             retriever=retriever_,
+            node_postprocessors=[similar_cutoff],
             response_synthesizer=get_response_synthesizer(response_mode="tree_summarize",streaming=True),
         )
         return query_engine_
@@ -291,6 +298,7 @@ class VinmecRetriever:
         response = self.llm.predict(query_, query= question)
         
         behavior = response.split("\n")[-1]
+        print(behavior)
         if "SEARCH" in behavior:
             return rag_type(behavior.replace("SEARCH ",""))
         else:
