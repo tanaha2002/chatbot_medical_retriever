@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import re
 import psycopg2
 from llama_index import VectorStoreIndex, Document
 import requests
@@ -303,7 +304,7 @@ class VinmecRetriever:
         response = self.llm.predict(query_, query= question)
         behavior = response.split("\n")[-1]
         print(behavior)
-        if "SEARCH" in behavior:    
+        if "SEARCH" in behavior:
             return rag_type(behavior.replace("SEARCH ",""))
         else:
             return behavior
@@ -319,27 +320,6 @@ class VinmecRetriever:
         content = cur.fetchall()
         cur.close()
         return content
-        
-    def prompt_find_relevant_links(self, question, link_info, num_queries):
-        # link_info = []
-        # for node in response.source_nodes:
-        #     link = node.metadata['url']
-        #     content = self.search_link(link)
-        #     link_info.append({"link":link,"content":content})
-            
-        link_selection_prompt = """
-            You are an intelligent assistant with the task of searching and selecting links with the most relevant content for the given question.
-            Please provide feedback in Vietnamese.
-            When receiving a question about a health issue, examine the content of the links and select {num_queries} links with the most relevant content to the question.
-            Return the list of selected links, each on a new line.
-            Below is the question and a list of links along with their content:
-            Question: {query}
-            Link and content: {links_info}
-            List of selected links:
-            """
-        prompt = PromptTemplate(link_selection_prompt)
-        response = self.llm.predict(prompt, num_queries=num_queries, query=question, links_info=link_info)
-        return response
     
 
     def init_index1_and_title(self):
@@ -389,29 +369,61 @@ class VinmecRetriever:
         for i in self.list_title:
             if i[0] in list_link:
                 title.append(i)
+        title_str = ""
+        for i, value in enumerate(title):
+            match = re.split(r', ', value[1])
+            title_str = title_str + f"{i + 1}. {match[0]}\n"
         
-        title_str = "".join([f"{i + 1}. {value[1]}\n" for i, value in enumerate(title)])  
+        # title_str = "".join([f"{i + 1}. {value[1]}\n" for i, value in enumerate(title)])  
         return title,title_str
     
     def decide_index_retriever(self,question,title_str):
+        # query_gen_str = """
+        # You are a helpful assistant in helping to identify the items from the list below that correspond to the same type of illness as in my query.
+        # Make sure you read all of them carefully.
+        # Please consider the list of illness descriptions and point out the items that describe the same type of illness as in my query.
+        # Make sure you have selected all relevant indexes.
+        # No need to explain.
+        # Always respond index number.
+        # Example:
+        # Query: Caring for and treating a neck sprain?
+        # Information:
+        # 1. What to do when you have a neck sprain?
+        # 2. Can toddlers aged 2-4 also experience depression?
+        # 3. Guidelines for caring for a child with a cough
+        # 4. Very sensitive child
+        # 5. How to alleviate neck strain during sleep?
+        # 6. Treating and caring for young children with pneumonia
+        # Selected index: 1, 5
+        # If there noone index relative then return `None`.
+        # Query: {query}\n
+        # Information: \n{infor}\n
+        # Selected index:
+        # """
+        
         query_gen_str = """
-        You are a helpful assistant that determines the index relative to query.  
-        Maybe some index contain a little the information about the query, make sure you read it carefully.
-        If you think it is useful for you, you can select it. No need to explain.
-        Always respond index number.
-        Example:
-        Query: What is the symptom of covid?
-        Information:
-        1. Covid is a disease caused by SARS-CoV-2 virus.
-        2. The most common symptoms of COVID-19 are fever, dry cough, and tiredness.
-        3. covid is done in 2023
-        4. Some people become infected.
-        Selected index: 1,2,4
-        If there noone index relative then return `None`.
-        Query: {query}\n
-        Information: \n{infor}\n
-        Selected index:
+        Bạn là người trợ giúp hữu ích trong việc giúp xác định các mục trong danh sách dưới đây tương ứng với cùng loại bệnh như trong truy vấn của tôi.
+        Hãy chắc chắn rằng bạn đọc tất cả chúng một cách cẩn thận.
+        Vui lòng xem xét danh sách các mô tả bệnh tật và chỉ ra các mục mô tả cùng loại bệnh như trong câu hỏi của tôi.
+        Chỉ mục được chọn bao gồm các mục mô tả các triệu chứng hoặc vấn đề liên quan đến cùng loại bệnh như được đề cập trong truy vấn. Xác định tất cả các chỉ số có liên quan.
+        Không cần phải giải thích.
+        Luôn trả lời số chỉ mục.
+        Ví dụ:
+        Hỏi: Chăm sóc và điều trị bong gân cổ?
+        Thông tin:
+        1. Bị bong gân cổ phải làm sao?
+        2. Trẻ mới biết đi từ 2-4 tuổi có bị trầm cảm không?
+        3. Hướng dẫn chăm sóc trẻ bị ho
+        4. Trẻ rất nhạy cảm
+        5. Làm thế nào để giảm căng cơ cổ khi ngủ?
+        6. Điều trị và chăm sóc trẻ nhỏ bị viêm phổi
+        Chỉ số đã chọn: 1, 5
+        Nếu không có chỉ mục tương đối thì trả về `None`.
+        Truy vấn: {query}\n
+        Thông tin: \n{infor}\n
+        Chỉ số đã chọn:
         """
+
         gen = query_gen_str.format(query=question,infor=title_str)
         print(gen)
         query_gen_prompt = PromptTemplate(gen)

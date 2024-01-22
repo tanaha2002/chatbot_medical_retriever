@@ -15,6 +15,12 @@ model = "gpt-3.5-turbo-1106"
 api_key = st.secrets['api_key']
 vin_retriever = VinmecRetriever(DB_VECTOR, DB_ROOT, url_pg_vector,model,api_key)
 
+
+question = "Bị mắc nghẹn vật to ở cổ thì nên làm thế nào?"
+answer = vin_retriever.behavior_controller(question, vin_retriever.hybrid_retriever_engine)
+for text in answer:
+    print(text, end="", flush=True)
+
 question = "Bị nghẹn vật to ở cổ thì phải làm sao?"
 # answer = vin_retriever.behavior_controller(question, vin_retriever.hybrid_retriever_engine)
 # for text in answer:
