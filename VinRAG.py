@@ -21,14 +21,13 @@ from llama_index.query_engine.retriever_query_engine import (
 )
 from llama_index import get_response_synthesizer
 from llama_index.prompts import PromptTemplate
-<<<<<<< Updated upstream
+
 from llama_index.indices.postprocessor import SimilarityPostprocessor
 from llama_index.indices.postprocessor import LLMRerank
 from llama_index.indices.postprocessor import SentenceEmbeddingOptimizer
-=======
+
 from CustomRV import CustomRetriever
 
->>>>>>> Stashed changes
 class VinmecRetriever:
     def __init__(self, db_vector, db_root, url_pg_vector,model,api_key, table_storage_index = "vinmec_storage_index"):
         os.environ["OPENAI_API_KEY"] = api_key
@@ -402,6 +401,15 @@ class VinmecRetriever:
         answer = self.decide_index_retriever(question,title_str)
         link_selected = self.get_index(answer,title)
         if link_selected is None:
-            return "Tôi hiện chưa được cập nhật thông tin này."
+            return None
         else:
             return link_selected
+        
+    def retrieve_with_custom(self,question):
+        link_selected = self.create_custom_rv(question)
+        if link_selected == None:
+            return None
+        else:
+            return self.create_retriever_stupid_2(question)
+    
+    
