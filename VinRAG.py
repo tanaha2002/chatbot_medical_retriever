@@ -320,41 +320,6 @@ class VinmecRetriever:
         content = cur.fetchall()
         cur.close()
         return content
-        
-    def prompt_find_relevant_links(self, query, info):
-        # link_info = []
-        # i = 1
-        # for node in response.source_nodes:
-        #     link = node.metadata['url']
-        #     content = self.search_link(link)
-        #     link_info.append(f'{i}. {content}\n')
-            
-        link_selection_prompt = """
-            You are a helpful assistant that determines the indexes are most relative to query.
-            Maybe some index contain a little the information about the query, make sure you read them all carefully.
-            Make sure the INDEXES SELECTED HAVE THE MOST RELEVANT CONTENT TO THE QUERY.
-            If you think it is useful for you, you can select it. No need to explain.
-            Always respond index number.
-            Example:
-            Query: What is the symptom of covid?
-            Information:
-            1. Covid is a disease caused by SARS-CoV-2 virus.
-            2. The most common symptoms of COVID-19 are fever, dry cough, and tiredness.
-            3. covid is done in 2023
-            4. Some people become infected.
-            Selected index: 1,2,4
-            If there noone index relative then return 'None'.
-            Query: {query}\n
-            Information: \n{infor}\n
-            Selected index:
-            """
-            
-        gen = link_selection_prompt.format(query=query,infor=info)
-        print(gen)
-        prompt = PromptTemplate(link_selection_prompt)
-        response = self.llm.predict(prompt, query=query, infor=info)
-        
-        return response
     
 
     def init_index1_and_title(self):
