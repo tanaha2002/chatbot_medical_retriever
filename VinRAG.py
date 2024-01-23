@@ -26,9 +26,9 @@ from llama_index.prompts import PromptTemplate
 from llama_index.indices.postprocessor import SimilarityPostprocessor
 from llama_index.indices.postprocessor import LLMRerank
 from llama_index.indices.postprocessor import SentenceEmbeddingOptimizer
-
+import json
 from CustomRV import CustomRetriever
-
+from llama_index.schema import NodeWithScore,TextNode,NodeRelationship,ObjectType,RelatedNodeInfo
 class VinmecRetriever:
     def __init__(self, db_vector, db_root, url_pg_vector,model,api_key, table_storage_index = "vinmec_storage_index"):
         os.environ["OPENAI_API_KEY"] = api_key
@@ -41,11 +41,14 @@ class VinmecRetriever:
         self.connection_string = st.secrets['connection_string']
         self.table_storage_index = table_storage_index
         self.index = self.get_index_all()
+        # self.node_data = self.get_whole_node()
+        # self.node_data = None
         self.index_1,self.list_title = self.init_index1_and_title()
         self.chat_engine_2 = self.init_engine_2()
         self.hybrid_engine = self.retriever_query_engine()
         self.hybrid_engine = self.prompt_format(self.hybrid_engine)
         self.custom_rv = self.init_customRV()
+        
     def connect_db(self, db_name):
         try:
             url_ = self.url_pg_vector.format(db=db_name)
@@ -142,8 +145,8 @@ class VinmecRetriever:
                 password=url.password,
                 port=url.port,
                 user=url.username,
-                hybrid_search=hybrid_search,
-                text_search_config=text_search_config,
+                # hybrid_search=hybrid_search,
+                # text_search_config=text_search_config,
                 table_name=self.table_storage_index,
                 embed_dim=1536, #openai embedding dim
                 
@@ -178,24 +181,6 @@ class VinmecRetriever:
                 "\nInstruction: sử dụng ngữ cảnh bên trên để trả lời câu hỏi. Nếu ngữ cảnh không liên quan. Hãy trả lời `Tôi hiện chưa được cập nhật thông tin này.`\n\n"
     ),
         )
-    
-    def create_retriever_stupid_22(self,question):
-        """_summary_
-
-        Ask question on chat engine 2
-
-        Returns:
-            _type_: _string_
-        """
-        response_stream = self.chat_engine_2.stream_chat(question)
-        response = ''
-        response_source = 'Nguồn tài liệu liên quan: \n'
-        for token in response_stream.response_gen:
-            print(token, end="", flush=True)
-            response += token
-        for node in response_stream.source_nodes:
-            print("\n", node.metadata['url'])
-        return response,response_source
 
     def create_retriever_stupid_2(self,question):
         """_summary_
@@ -229,18 +214,18 @@ class VinmecRetriever:
             # vector_storage_kwargs={"ivfflat_probes":ivfflat_probes,"hnsw_ef_search": hnsw_ef_search},
         )
         #adding some postprocessor
-        similar_cutoff = SimilarityPostprocessor(similarity_cutoff=0.6)
+        # similar_cutoff = SimilarityPostprocessor(similarity_cutoff=0.6)
         # sentence_optimizer = SentenceEmbeddingOptimizer(percentile_cutoff=0.3)
         # re_ranker = LLMRerank(choice_batch_size=3,top_n = 2,service_context=self.service_context)
         query_engine_ = RetrieverQueryEngine(
             retriever=retriever_,
-            node_postprocessors=[similar_cutoff],
+            # node_postprocessors=[similar_cutoff],
             response_synthesizer=get_response_synthesizer(response_mode="tree_summarize",streaming=True),
         )
         return query_engine_
     
     
-    def hybrid_retriever_engine(self, question,):
+    def hybrid_retriever_engine(self, question):
         """_summary_
         Using hybrid search in pgvector for searching retriever from database
         
@@ -249,7 +234,7 @@ class VinmecRetriever:
             full_source: _string_
         """
         response =  self.hybrid_engine.query(question)
-        print(f'-------{response}-------')
+        # print(f'-------{response}-------')
         yield "Tài liệu liên quan: \n"
         for node in response.source_nodes:
             yield node.metadata['url']  + "\n"
@@ -361,21 +346,24 @@ class VinmecRetriever:
     def get_customRV(self,question):
         ans = self.custom_rv.retrieve(question)
         list_link = []
+        self.list_link = []
+        self.ans = ans
         for a in ans:
-            # print(a.metadata['url'])
             list_link.append(a.metadata['url'])
-        
+            self.list_link.append(a.node.to_dict())
         title = []
         for i in self.list_title:
             if i[0] in list_link:
                 title.append(i)
-        title_str = ""
-        for i, value in enumerate(title):
-            match = re.split(r', ', value[1])
-            title_str = title_str + f"{i + 1}. {match[0]}\n"
+        # for
+        # title_str = ""
+        # for i, value in enumerate(title):
+        #     match = re.split(r', ', value[1])
+        #     title_str = title_str + f"{i + 1}. {match[0]}\n"
         
-        # title_str = "".join([f"{i + 1}. {value[1]}\n" for i, value in enumerate(title)])  
-        return title,title_str
+        title_str = "".join([f"{i + 1}. {value[1]}\n" for i, value in enumerate(title)])  
+        # return 
+        return title,title_str,self.list_link
     
     def decide_index_retriever(self,question,title_str):
         # query_gen_str = """
@@ -442,6 +430,8 @@ class VinmecRetriever:
         link_selected = [title[i-1][0] for i in index]
         return link_selected
     
+
+    
     def create_custom_rv(self,question):
         title,title_str = self.get_customRV(question)
         answer = self.decide_index_retriever(question,title_str)
@@ -451,11 +441,108 @@ class VinmecRetriever:
         else:
             return link_selected
         
-    def retrieve_with_custom(self,question):
+    # def retrieve_with_custom(self,question):
+    #     link_selected = self.create_custom_rv(question)
+    #     if link_selected == None:
+    #         return None
+    #     else:
+    #         return self.create_retriever_stupid_2(question)
+        
+        
+    #----------------PROCESS NODE FOR CUSTOM RETRIEVER----------------#
+    def get_whole_node(self):
+        node_data =[]
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT text,metadata_,node_id from data_vinmec_storage_index")
+            for row in cur:
+                node_data.append(row)
+        return node_data
+    
+    
+    def struct_create_node(self,node_list_):
+        node_list = []
+        for i in range(len(node_list_)):
+            data_dict = json.loads(node_list_[i][1]['_node_content'])
+            node=TextNode(
+                id_=data_dict['id_'],
+                embedding=data_dict['embedding'],
+                text=node_list_[i][0],
+                metadata=data_dict['metadata'],
+                excluded_embed_metadata_keys=data_dict['excluded_embed_metadata_keys'],
+                excluded_llm_metadata_keys=data_dict['excluded_llm_metadata_keys'],
+                hash=data_dict['hash'],
+            )
+            node.relationships[NodeRelationship.SOURCE] = RelatedNodeInfo(
+                node_id=data_dict['relationships'][NodeRelationship.SOURCE]['node_id'],
+                node_type=ObjectType(data_dict['relationships'][NodeRelationship.SOURCE]['node_type']),
+                metadata=data_dict['relationships'][NodeRelationship.SOURCE]['metadata'],
+                hash=data_dict['relationships'][NodeRelationship.SOURCE]['hash'],
+                class_name=data_dict['relationships'][NodeRelationship.SOURCE]['class_name'],
+            )
+            node.relationships[NodeRelationship.PREVIOUS] = RelatedNodeInfo(
+                node_id=data_dict['relationships'][NodeRelationship.PREVIOUS]['node_id'],
+                node_type=ObjectType(data_dict['relationships'][NodeRelationship.PREVIOUS]['node_type']),
+                metadata=data_dict['relationships'][NodeRelationship.PREVIOUS]['metadata'],
+                hash=data_dict['relationships'][NodeRelationship.PREVIOUS]['hash'],
+                class_name=data_dict['relationships'][NodeRelationship.PREVIOUS]['class_name'],
+            )
+            node.relationships[NodeRelationship.NEXT] = RelatedNodeInfo(
+                node_id=data_dict['relationships'][NodeRelationship.NEXT]['node_id'],
+                node_type=ObjectType(data_dict['relationships'][NodeRelationship.NEXT]['node_type']),
+                metadata=data_dict['relationships'][NodeRelationship.NEXT]['metadata'],
+                hash=data_dict['relationships'][NodeRelationship.NEXT]['hash'],
+                class_name=data_dict['relationships'][NodeRelationship.NEXT]['class_name'],
+            )
+            node_list.append(node)
+        return node_list
+    
+    def get_excluse_node(self,link_selected):
+        self.node_selected = [node for node in self.list_link if node['metadata']['url'] in link_selected]
+        self.selected_node =[]
+        # for node in self.node_data:
+        #     if node[2] in self.node_selected:
+        #         self.selected_node.append(node)
+        # excluse_link = [node['metadata']['url'] for node in self.node_selected if node['metadata']['url'] not in [_[1]['url'] for _ in self.selected_node]]
+        
+        # excluse_node = [node for node in self.node_data if node[1]['url'] in excluse_link]
+        # excluse_node = self.struct_create_node(excluse_node)
+        # return excluse_node
+        return self.node_selected
+    
+        
+    
+
+    def pipeline_custom_retriever(self,question):
         link_selected = self.create_custom_rv(question)
-        if link_selected == None:
-            return None
-        else:
-            return self.create_retriever_stupid_2(question)
+        excluse_node = self.get_excluse_node(link_selected)
+        storage_instance = StorageContext.from_defaults(docstore=self.index.docstore)
+        instance_vectorindex = VectorStoreIndex(excluse_node,storage_context=storage_instance)
+        instance_search = VectorIndexRetriever(instance_vectorindex,similarity_top_k=3)
+        instance_ans = instance_search.retrieve(question) #find node high score in excluse node
+        selected_node_with_score = [node for node in self.ans if node.node.node_id in [_[2] for _ in self.selected_node]]
+        combine_node = [node.node for node in selected_node_with_score + instance_ans]
+        instance_vectorindex = VectorStoreIndex(combine_node,storage_context=storage_instance)
+        query_engine = RetrieverQueryEngine(
+            retriever=VectorIndexRetriever(instance_vectorindex,similarity_top_k=3),response_synthesizer=get_response_synthesizer(response_mode="tree_summarize",streaming=True)
+            )
+
+        query_engine = self.prompt_format(query_engine)
+        response = query_engine.query(question)
+        yield "Tài liệu liên quan: \n"
+        for node in response.source_nodes:
+            yield node.metadata['url']  + "\n"
+        for text in response.response_gen:
+            yield text
+        
+        
+        
+        
+        
+        #
+        
+        
+        
+        
+    
     
     

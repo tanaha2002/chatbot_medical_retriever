@@ -62,6 +62,23 @@ class CustomRetriever(BaseRetriever):
             # Wait for the results
             title_nodes = title_future.result()
             content_nodes = content_future.result()
+            
+        #check if title_nodes.metadata['url] is same as content_nodes.metadata['url'] then remove it from title_nodes
+        
+        # Convert content_nodes URLs to a set for faster lookup
+        content_urls = set(j.node.metadata['url'] for j in content_nodes)
+
+        # Create a new list excluding nodes with URLs present in content_nodes
+        title_nodes = [i for i in title_nodes if i.node.metadata['url'] not in content_urls]
+
+        # Create a dictionary to store the highest score for each URL
+        url_scores = {}
+        for i in content_nodes:
+            url = i.node.metadata['url']
+            if url not in url_scores or i.score > url_scores[url].score:
+                url_scores[url] = i
+        # Convert the dictionary values back to a list
+        content_nodes = list(url_scores.values())
 
         title_ids = {n.node.node_id for n in title_nodes}
         content_ids = {n.node.node_id for n in content_nodes}
