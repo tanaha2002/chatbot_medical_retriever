@@ -22,6 +22,7 @@ from llama_index.query_engine.retriever_query_engine import (
 )
 from llama_index import get_response_synthesizer
 from llama_index.prompts import PromptTemplate
+from concurrent.futures import ThreadPoolExecutor
 
 from llama_index.indices.postprocessor import SimilarityPostprocessor
 from llama_index.indices.postprocessor import LLMRerank
@@ -346,28 +347,6 @@ class VinmecRetriever:
     
     
     def decide_index_retriever(self,question,title_str):
-        # query_gen_str = """
-        # You are a helpful assistant in helping to identify the items from the list below that correspond to the same type of illness as in my query.
-        # Make sure you read all of them carefully.
-        # Please consider the list of illness descriptions and point out the items that describe the same type of illness as in my query.
-        # Make sure you have selected all relevant indexes.
-        # No need to explain.
-        # Always respond index number.
-        # Example:
-        # Query: Caring for and treating a neck sprain?
-        # Information:
-        # 1. What to do when you have a neck sprain?
-        # 2. Can toddlers aged 2-4 also experience depression?
-        # 3. Guidelines for caring for a child with a cough
-        # 4. Very sensitive child
-        # 5. How to alleviate neck strain during sleep?
-        # 6. Treating and caring for young children with pneumonia
-        # Selected index: 1, 5
-        # If there noone index relative then return `None`.
-        # Query: {query}\n
-        # Information: \n{infor}\n
-        # Selected index:
-        # """
         
         query_gen_str = """
         Bạn là người trợ giúp hữu ích trong việc giúp xác định các mục trong danh sách dưới đây tương ứng với cùng loại bệnh như trong truy vấn của tôi.
@@ -393,7 +372,7 @@ class VinmecRetriever:
         """
 
         gen = query_gen_str.format(query=question,infor=title_str)
-        print(gen)
+        # print(gen)
         query_gen_prompt = PromptTemplate(gen)
         llm = OpenAI(model="gpt-3.5-turbo-1106")
         # response = llm.predict(query_gen_prompt, query= query,infor = infor)
@@ -435,14 +414,6 @@ class VinmecRetriever:
         
         
     #----------------PROCESS NODE FOR CUSTOM RETRIEVER----------------#
-    def get_whole_node(self):
-        node_data =[]
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT text,metadata_,node_id from data_vinmec_storage_index")
-            for row in cur:
-                node_data.append(row)
-        return node_data
-    
     
     def struct_create_node(self,node_list_):
         node_list = []
