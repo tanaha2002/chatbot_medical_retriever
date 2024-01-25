@@ -249,7 +249,7 @@ class VinmecRetriever:
             full_source: _string_
         """
         response =  self.hybrid_engine.query(question)
-        print(f'-------{response}-------')
+        # print(f'-------{response}-------')
         yield "Tài liệu liên quan: \n"
         for node in response.source_nodes:
             yield node.metadata['url']  + "\n"
@@ -305,7 +305,8 @@ class VinmecRetriever:
         behavior = response.split("\n")[-1]
         print(behavior)
         if "SEARCH" in behavior:
-            return rag_type(behavior.replace("SEARCH ",""))
+            # return rag_type(behavior.replace("SEARCH ",""))
+            return behavior.replace("SEARCH ","")
         else:
             return behavior
         
@@ -369,62 +370,63 @@ class VinmecRetriever:
         for i in self.list_title:
             if i[0] in list_link:
                 title.append(i)
-        title_str = ""
-        for i, value in enumerate(title):
-            match = re.split(r', ', value[1])
-            title_str = title_str + f"{i + 1}. {match[0]}\n"
+        # title_str = ""
+        # for i, value in enumerate(title):
+        #     match = re.split(r', ', value[1])
+        #     title_str = title_str + f"{i + 1}. {match[0]}\n"
         
-        # title_str = "".join([f"{i + 1}. {value[1]}\n" for i, value in enumerate(title)])  
+        title_str = "".join([f"{i + 1}. {value[1]}\n" for i, value in enumerate(title)])  
         return title,title_str
     
-    def decide_index_retriever(self,question,title_str):
-        # query_gen_str = """
-        # You are a helpful assistant in helping to identify the items from the list below that correspond to the same type of illness as in my query.
-        # Make sure you read all of them carefully.
-        # Please consider the list of illness descriptions and point out the items that describe the same type of illness as in my query.
-        # Make sure you have selected all relevant indexes.
-        # No need to explain.
-        # Always respond index number.
-        # Example:
-        # Query: Caring for and treating a neck sprain?
-        # Information:
-        # 1. What to do when you have a neck sprain?
-        # 2. Can toddlers aged 2-4 also experience depression?
-        # 3. Guidelines for caring for a child with a cough
-        # 4. Very sensitive child
-        # 5. How to alleviate neck strain during sleep?
-        # 6. Treating and caring for young children with pneumonia
-        # Selected index: 1, 5
-        # If there noone index relative then return `None`.
-        # Query: {query}\n
-        # Information: \n{infor}\n
-        # Selected index:
-        # """
-        
+    def decide_index_retriever(self,question, title, title_str):
         query_gen_str = """
-        Bạn là người trợ giúp hữu ích trong việc giúp xác định các mục trong danh sách dưới đây tương ứng với cùng loại bệnh như trong truy vấn của tôi.
-        Hãy chắc chắn rằng bạn đọc tất cả chúng một cách cẩn thận.
-        Vui lòng xem xét danh sách các mô tả bệnh tật và chỉ ra các mục mô tả cùng loại bệnh như trong câu hỏi của tôi.
-        Chỉ mục được chọn bao gồm các mục mô tả các triệu chứng hoặc vấn đề liên quan đến cùng loại bệnh như được đề cập trong truy vấn. Xác định tất cả các chỉ số có liên quan.
-        Không cần phải giải thích.
-        Luôn trả lời số chỉ mục.
-        Ví dụ:
-        Hỏi: Chăm sóc và điều trị bong gân cổ?
-        Thông tin:
-        1. Bị bong gân cổ phải làm sao?
-        2. Trẻ mới biết đi từ 2-4 tuổi có bị trầm cảm không?
-        3. Hướng dẫn chăm sóc trẻ bị ho
-        4. Trẻ rất nhạy cảm
-        5. Làm thế nào để giảm căng cơ cổ khi ngủ?
-        6. Điều trị và chăm sóc trẻ nhỏ bị viêm phổi
-        Chỉ số đã chọn: 1, 5
-        Nếu không có chỉ mục tương đối thì trả về `None`.
-        Truy vấn: {query}\n
-        Thông tin: \n{infor}\n
-        Chỉ số đã chọn:
+        You are a helpful assistant in identifying items in the list below corresponding to the same type of disease as in my query.
+        Make sure you read all of them carefully.
+        Please consider the list of disease descriptions and identify the items describing the same type of disease as in my query.
+        The selected index includes items describing symptoms related to the same type of disease as mentioned in the query. Identify all relevant indices.
+        The number of indexes selected cannot exceed {max_index}
+        No need to explain.
+        Always respond index number.
+        Example:
+        Query: Chăm sóc và điều trị trẹo cổ?
+        Information:
+        1. Bị bong vẹo cổ phải làm sao?
+        2. Cách chăm sóc bệnh nhân ung thư tại nhà
+        3. Trẻ nhỏ 2-4 tuổi cũng có thể trầm cảm?
+        4. Chăm sóc trẻ bị viêm họng tại nhà như thế nào?,
+        5. Người bị trầm cảm thì nên làm gì?
+        6. Phát hiện và điều trị vẹo cổ ở trẻ nhỏ
+        Selected index: 1, 6
+        If there noone index relative then return `None`.
+        Query: {query}\n
+        Information: \n{infor}\n
+        Selected index:
         """
+        
+        # query_gen_str = """
+        # Bạn là người trợ giúp hữu ích trong việc giúp xác định các mục trong danh sách dưới đây tương ứng với cùng loại bệnh như trong truy vấn của tôi.
+        # Hãy chắc chắn rằng bạn đọc tất cả chúng một cách cẩn thận.
+        # Vui lòng xem xét danh sách các mô tả bệnh tật và chỉ ra các mục mô tả cùng loại bệnh như trong câu hỏi của tôi.
+        # Chỉ mục được chọn bao gồm các mục mô tả các triệu chứng liên quan đến cùng 1 loại bệnh như được đề cập trong truy vấn. Xác định tất cả các chỉ số có liên quan.
+        # Không cần phải giải thích.
+        # Luôn trả lời số chỉ mục.
+        # Ví dụ:
+        # Hỏi: Chăm sóc và điều trị trẹo cổ?
+        # Thông tin:
+        # 1. Bị bong vẹo cổ phải làm sao?
+        # 2. Cách chăm sóc bệnh nhân ung thư tại nhà
+        # 3. Trẻ nhỏ 2-4 tuổi cũng có thể trầm cảm?
+        # 4. Chăm sóc trẻ bị viêm họng tại nhà như thế nào?,
+        # 5. Người bị trầm cảm thì nên làm gì?
+        # 6. Phát hiện và điều trị vẹo cổ ở trẻ nhỏ
+        # Chỉ số đã chọn: 1, 6
+        # Nếu không có chỉ mục tương đối thì trả về `None`.
+        # Truy vấn: {query}\n
+        # Thông tin: \n{infor}\n
+        # Chỉ số đã chọn:
+        # """
 
-        gen = query_gen_str.format(query=question,infor=title_str)
+        gen = query_gen_str.format(query=question,infor=title_str, max_index= len(title))
         print(gen)
         query_gen_prompt = PromptTemplate(gen)
         llm = OpenAI(model="gpt-3.5-turbo-1106")
