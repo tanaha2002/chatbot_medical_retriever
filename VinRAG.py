@@ -343,27 +343,7 @@ class VinmecRetriever:
         return CustomRetriever(vector_retriever_1,vector_retriever_2)
 
     
-    def get_customRV(self,question):
-        ans = self.custom_rv.retrieve(question)
-        list_link = []
-        self.list_link = []
-        self.ans = ans
-        for a in ans:
-            list_link.append(a.metadata['url'])
-            self.list_link.append(a.node.to_dict())
-        title = []
-        for i in self.list_title:
-            if i[0] in list_link:
-                title.append(i)
-        # for
-        # title_str = ""
-        # for i, value in enumerate(title):
-        #     match = re.split(r', ', value[1])
-        #     title_str = title_str + f"{i + 1}. {match[0]}\n"
-        
-        title_str = "".join([f"{i + 1}. {value[1]}\n" for i, value in enumerate(title)])  
-        # return 
-        return title,title_str,self.list_link
+    
     
     def decide_index_retriever(self,question,title_str):
         # query_gen_str = """
@@ -430,7 +410,19 @@ class VinmecRetriever:
         link_selected = [title[i-1][0] for i in index]
         return link_selected
     
-
+    def get_customRV(self,question):
+        self.title_nodes,self.content_nodes = self.custom_rv.retrieve(question)
+        temporary_url_title_nodes = [node.metadata['url'] for node in self.title_nodes]
+        temporary_url_content_nodes = []
+        for node in self.content_nodes:
+            temporary_url_content_nodes.append(node.metadata['url'])
+        title = []
+        for i in self.list_title:
+            if i[0] in temporary_url_content_nodes or i[0] in temporary_url_title_nodes:
+                title.append(i)
+        title_str = "".join([f"{i + 1}. {value[1]}\n" for i, value in enumerate(title)])  
+        # return 
+        return title,title_str
     
     def create_custom_rv(self,question):
         title,title_str = self.get_customRV(question)
@@ -440,13 +432,6 @@ class VinmecRetriever:
             return None
         else:
             return link_selected
-        
-    # def retrieve_with_custom(self,question):
-    #     link_selected = self.create_custom_rv(question)
-    #     if link_selected == None:
-    #         return None
-    #     else:
-    #         return self.create_retriever_stupid_2(question)
         
         
     #----------------PROCESS NODE FOR CUSTOM RETRIEVER----------------#
@@ -496,34 +481,39 @@ class VinmecRetriever:
             node_list.append(node)
         return node_list
     
-    def get_excluse_node(self,link_selected):
-        self.node_selected = [node for node in self.list_link if node['metadata']['url'] in link_selected]
-        self.selected_node =[]
-        # for node in self.node_data:
-        #     if node[2] in self.node_selected:
-        #         self.selected_node.append(node)
-        # excluse_link = [node['metadata']['url'] for node in self.node_selected if node['metadata']['url'] not in [_[1]['url'] for _ in self.selected_node]]
-        
-        # excluse_node = [node for node in self.node_data if node[1]['url'] in excluse_link]
-        # excluse_node = self.struct_create_node(excluse_node)
-        # return excluse_node
-        return self.node_selected
     
+    def get_final_list_nodes(self,link_selected):
+        #check if node selected is in title or content
+        self.selected_node = []
+        self.need_to_search = []
+        for link in link_selected:
+            if link in [node.metadata['url'] for node in self.content_nodes]:
+                self.selected_node.append([node for node in self.content_nodes if node.metadata['url'] == link][0])
+            else:
+                self.need_to_search.append(link)
+        with self.conn.cursor() as cur:
+            for link in self.need_to_search:
+                query = "SELECT text,metadata_,node_id FROM data_vinmec_storage_index  WHERE  metadata_::json->>'url'  = %s"
+                cur.execute(query,(link,))
+                search_nodes = cur.fetchall()
         
+        #convert to node
+        convert_node = self.struct_create_node(search_nodes)
+        final_list_nodes = self.selected_node + convert_node
+        
+        
+        return final_list_nodes
     
 
     def pipeline_custom_retriever(self,question):
         link_selected = self.create_custom_rv(question)
-        excluse_node = self.get_excluse_node(link_selected)
+        final_list_nodes = self.get_final_list_nodes(link_selected)
         storage_instance = StorageContext.from_defaults(docstore=self.index.docstore)
-        instance_vectorindex = VectorStoreIndex(excluse_node,storage_context=storage_instance)
+        instance_vectorindex = VectorStoreIndex(final_list_nodes,storage_context=storage_instance)
         instance_search = VectorIndexRetriever(instance_vectorindex,similarity_top_k=3)
-        instance_ans = instance_search.retrieve(question) #find node high score in excluse node
-        selected_node_with_score = [node for node in self.ans if node.node.node_id in [_[2] for _ in self.selected_node]]
-        combine_node = [node.node for node in selected_node_with_score + instance_ans]
-        instance_vectorindex = VectorStoreIndex(combine_node,storage_context=storage_instance)
+
         query_engine = RetrieverQueryEngine(
-            retriever=VectorIndexRetriever(instance_vectorindex,similarity_top_k=3),response_synthesizer=get_response_synthesizer(response_mode="tree_summarize",streaming=True)
+            retriever=instance_search,response_synthesizer=get_response_synthesizer(response_mode="tree_summarize",streaming=True)
             )
 
         query_engine = self.prompt_format(query_engine)

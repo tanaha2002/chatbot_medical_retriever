@@ -87,7 +87,8 @@ class CustomRetriever(BaseRetriever):
         combine_dict.update({_.node.node_id: _ for _ in content_nodes})
 
         # Union title and content
-        retrieve_ids = title_ids.union(content_ids)
-        retrieve_nodes = [combine_dict[_] for _ in retrieve_ids]
+        # retrieve_ids = title_ids.union(content_ids)
+        # retrieve_nodes = [combine_dict[_] for _ in retrieve_ids]
 
-        return retrieve_nodes
+        # return retrieve_nodes
+        return [node.node for node in title_nodes], [node.node for node in content_nodes]
