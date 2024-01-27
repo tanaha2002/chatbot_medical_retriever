@@ -381,11 +381,11 @@ class VinmecRetriever:
     def decide_index_retriever(self,question, title, title_str):
         query_gen_str = """
         You are a helpful assistant in identifying items in the list below corresponding to the same type of disease as in my query.
-        Make sure you read all of them carefully.
-        Please consider the list of disease descriptions and identify the items describing the same type of disease as in my query.
-        The selected index includes items describing symptoms related to the same type of disease as mentioned in the query. Identify all relevant indices.
+        Make sure you read them all carefully and know the illness in each index.
+        Please consider the list of disease descriptions and identify the items describing the same type of disease as in my query.   
+        The indexes have been sorted in descending order of disease  related to the query.
         The number of indexes selected cannot exceed {max_index}
-        No need to explain.
+        If you think the index has a related disease, you can choose. No need to explain.
         Always respond index number.
         Example:
         Query: Chăm sóc và điều trị trẹo cổ?
@@ -452,3 +452,46 @@ class VinmecRetriever:
             return "Tôi hiện chưa được cập nhật thông tin này."
         else:
             return link_selected
+        
+    
+    def google_search(self, query):
+        list_url = []
+        data = []
+        # Tạo một yêu cầu GET đến trang tìm kiếm của Google
+        url = f"https://www.google.com/search?q={query + ' SITE vinmec.com'}"
+        # print(url)
+        response = requests.get(url)
+
+        # Kiểm tra xem yêu cầu có thành công hay không (status code 200 là thành công)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            taget = soup.find('div', class_='Gx5Zad xpd EtOod pkphOe')
+            if taget:
+                ans = taget.find_all('div', class_='kCrYT')
+                if ans and len(ans) > 1:
+                    link_ = re.split('&', ans[1].find('a').get('href').replace('/url?q=', ''))[0]
+                    # link_ = regex(ans[1].find('a').get('href').replace('/url?q=', ''))
+                    # print(link_)
+                    list_url.append(str(link_))
+
+
+            elements = soup.find_all('div', class_='egMi0 kCrYT')
+            for element in elements:
+                link_ = re.split('&', element.find('a').get('href').replace('/url?q=', ''))[0]
+                # link_ = regex(element.find('a').get('href').replace('/url?q=', ''))
+                # print(link_)
+                list_url.append(str(link_))
+        
+        for item in list_url[0:3]:
+            content = ''
+            if 'vinmec.com' in item:
+                soup_ = BeautifulSoup(requests.get(item).text, 'html.parser')
+                content = soup_.find('h1').text.strip()
+                element = soup_.find_all('h2')
+                h2 = '; '.join([_.text.strip() for _ in element])
+                content += '; ' + h2
+                data.append([item, content])
+
+        return data
+    
