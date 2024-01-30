@@ -289,7 +289,6 @@ class VinmecRetriever:
         query_ = PromptTemplate(behavior_prompt)
         response = self.llm.predict(query_, query= question)
         behavior = response.split("\n")[-1]
-        print(behavior)
         if "SEARCH" in behavior:
             return rag_type(behavior.replace("SEARCH ",""))
         else:
@@ -380,6 +379,40 @@ class VinmecRetriever:
         
         return response
     
+    def google_search(self, query):
+        headers = {
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        list_url = []
+        title = []
+        # Tạo một yêu cầu GET đến trang tìm kiếm của Google
+        url = f"https://www.google.com/search?q={query.replace(' ', '%') + '%site:vinmec.com'}"
+        # print(url)
+        response = requests.get(url, headers=headers)
+        # print(response.status_code)
+
+        # Kiểm tra xem yêu cầu có thành công hay không (status code 200 là thành công)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            taget = soup.find_all('div', class_='MjjYud')
+            for _ in taget:
+                link_ = _.find('a').get('href')
+                list_url.append(link_)
+        
+        for item in list_url[0:3]:
+            content = ''
+            if 'vinmec.com' in item:
+                soup_ = BeautifulSoup(requests.get(item).text, 'html.parser')
+                content = soup_.find('h1').text.strip()
+                element = soup_.find_all('h2')
+                h2 = '; '.join([_.text.strip() for _ in element])
+                content += '; ' + h2
+                title.append([item, content])
+        title_str = "".join([f"{i + 1}. {value[1]}\n" for i, value in enumerate(title)])
+
+        return title, title_str
+    
+    
     def get_index(self,answer,title):
         if "Selected index" in answer:
             answer = answer.split("Selected index:")[1].strip()
@@ -404,9 +437,11 @@ class VinmecRetriever:
         return title,title_str
     
     def create_custom_rv(self,question):
-        title,title_str = self.get_customRV(question)
-        answer = self.decide_index_retriever(question,title_str)
-        link_selected = self.get_index(answer,title)
+        # title,title_str = self.get_customRV(question)
+        # answer = self.decide_index_retriever(question,title_str)
+        # link_selected = self.get_index(answer,title)
+        title, title_str = self.google_search(question)
+        link_selected = [item[0].replace('/vi', '') for item in title]
         if link_selected is None:
             return None
         else:
@@ -418,60 +453,65 @@ class VinmecRetriever:
     def struct_create_node(self,node_list_):
         node_list = []
         for i in range(len(node_list_)):
-            data_dict = json.loads(node_list_[i][1]['_node_content'])
-            node=TextNode(
-                id_=data_dict['id_'],
-                embedding=data_dict['embedding'],
-                text=node_list_[i][0],
-                metadata=data_dict['metadata'],
-                excluded_embed_metadata_keys=data_dict['excluded_embed_metadata_keys'],
-                excluded_llm_metadata_keys=data_dict['excluded_llm_metadata_keys'],
-                hash=data_dict['hash'],
-            )
-            node.relationships[NodeRelationship.SOURCE] = RelatedNodeInfo(
-                node_id=data_dict['relationships'][NodeRelationship.SOURCE]['node_id'],
-                node_type=ObjectType(data_dict['relationships'][NodeRelationship.SOURCE]['node_type']),
-                metadata=data_dict['relationships'][NodeRelationship.SOURCE]['metadata'],
-                hash=data_dict['relationships'][NodeRelationship.SOURCE]['hash'],
-                class_name=data_dict['relationships'][NodeRelationship.SOURCE]['class_name'],
-            )
-            node.relationships[NodeRelationship.PREVIOUS] = RelatedNodeInfo(
-                node_id=data_dict['relationships'][NodeRelationship.PREVIOUS]['node_id'],
-                node_type=ObjectType(data_dict['relationships'][NodeRelationship.PREVIOUS]['node_type']),
-                metadata=data_dict['relationships'][NodeRelationship.PREVIOUS]['metadata'],
-                hash=data_dict['relationships'][NodeRelationship.PREVIOUS]['hash'],
-                class_name=data_dict['relationships'][NodeRelationship.PREVIOUS]['class_name'],
-            )
-            node.relationships[NodeRelationship.NEXT] = RelatedNodeInfo(
-                node_id=data_dict['relationships'][NodeRelationship.NEXT]['node_id'],
-                node_type=ObjectType(data_dict['relationships'][NodeRelationship.NEXT]['node_type']),
-                metadata=data_dict['relationships'][NodeRelationship.NEXT]['metadata'],
-                hash=data_dict['relationships'][NodeRelationship.NEXT]['hash'],
-                class_name=data_dict['relationships'][NodeRelationship.NEXT]['class_name'],
-            )
-            node_list.append(node)
+                data_dict = json.loads(node_list_[i][1]['_node_content'])
+                node=TextNode(
+                    id_=data_dict['id_'],
+                    embedding=data_dict['embedding'],
+                    text=node_list_[i][0],
+                    metadata=data_dict['metadata'],
+                    excluded_embed_metadata_keys=data_dict['excluded_embed_metadata_keys'],
+                    excluded_llm_metadata_keys=data_dict['excluded_llm_metadata_keys'],
+                    hash=data_dict['hash'],
+                )
+                node.relationships[NodeRelationship.SOURCE] = RelatedNodeInfo(
+                    node_id=data_dict['relationships'][NodeRelationship.SOURCE]['node_id'],
+                    node_type=ObjectType(data_dict['relationships'][NodeRelationship.SOURCE]['node_type']),
+                    metadata=data_dict['relationships'][NodeRelationship.SOURCE]['metadata'],
+                    hash=data_dict['relationships'][NodeRelationship.SOURCE]['hash'],
+                    class_name=data_dict['relationships'][NodeRelationship.SOURCE]['class_name'],
+                )
+                node.relationships[NodeRelationship.PREVIOUS] = RelatedNodeInfo(
+                    node_id=data_dict['relationships'][NodeRelationship.PREVIOUS]['node_id'],
+                    node_type=ObjectType(data_dict['relationships'][NodeRelationship.PREVIOUS]['node_type']),
+                    metadata=data_dict['relationships'][NodeRelationship.PREVIOUS]['metadata'],
+                    hash=data_dict['relationships'][NodeRelationship.PREVIOUS]['hash'],
+                    class_name=data_dict['relationships'][NodeRelationship.PREVIOUS]['class_name'],
+                )
+                node.relationships[NodeRelationship.NEXT] = RelatedNodeInfo(
+                    node_id=data_dict['relationships'][NodeRelationship.NEXT]['node_id'],
+                    node_type=ObjectType(data_dict['relationships'][NodeRelationship.NEXT]['node_type']),
+                    metadata=data_dict['relationships'][NodeRelationship.NEXT]['metadata'],
+                    hash=data_dict['relationships'][NodeRelationship.NEXT]['hash'],
+                    class_name=data_dict['relationships'][NodeRelationship.NEXT]['class_name'],
+                )
+                node_list.append(node)
         return node_list
     
     
     def get_final_list_nodes(self,link_selected):
         #check if node selected is in title or content
-        self.selected_node = []
-        self.need_to_search = []
-        for link in link_selected:
-            if link in [node.metadata['url'] for node in self.content_nodes]:
-                self.selected_node.append([node for node in self.content_nodes if node.metadata['url'] == link][0])
-            else:
-                self.need_to_search.append(link)
+        # self.selected_node = []
+        # self.need_to_search = []
+        # print(link_selected)
+        # for link in link_selected:
+        #     if link in [node.metadata['url'] for node in self.content_nodes]:
+        #         self.selected_node.append([node for node in self.content_nodes if node.metadata['url'] == link][0])
+        #     else:
+        #         self.need_to_search.append(link)
+        # search_nodes = []
+        
         with self.conn.cursor() as cur:
-            for link in self.need_to_search:
-                query = "SELECT text,metadata_,node_id FROM data_vinmec_storage_index  WHERE  metadata_::json->>'url'  = %s"
+            for link in link_selected:
+                query = "SELECT text,metadata_,node_id FROM data_vinmec_storage_index  WHERE  metadata_::json->>'url' = %s"
                 cur.execute(query,(link,))
-                search_nodes = cur.fetchall()
-        
+                search_nodes = cur.fetchall() # search_nodes chỉ lấy được các node của link cuối cùng, không lấy những link trước.
+                
+        # print(search_nodes)
         #convert to node
-        convert_node = self.struct_create_node(search_nodes)
-        final_list_nodes = self.selected_node + convert_node
-        
+        # convert_node = self.struct_create_node(search_nodes)
+        # final_list_nodes = self.selected_node + convert_node
+        final_list_nodes = self.struct_create_node(search_nodes)
+        # print(final_list_nodes)
         
         return final_list_nodes
     
