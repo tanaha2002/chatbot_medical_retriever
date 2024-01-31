@@ -2,6 +2,7 @@ import os
 import numpy as np
 import re
 import psycopg2
+import json
 from llama_index import VectorStoreIndex, Document
 import requests
 from bs4 import BeautifulSoup
@@ -26,6 +27,7 @@ from llama_index.prompts import PromptTemplate
 from llama_index.indices.postprocessor import SimilarityPostprocessor
 from llama_index.indices.postprocessor import LLMRerank
 from llama_index.indices.postprocessor import SentenceEmbeddingOptimizer
+from llama_index.schema import NodeWithScore,TextNode,NodeRelationship,ObjectType,RelatedNodeInfo
 
 from CustomRV import CustomRetriever
 
@@ -41,6 +43,8 @@ class VinmecRetriever:
         self.connection_string = st.secrets['connection_string']
         self.table_storage_index = table_storage_index
         self.index = self.get_index_all()
+        # self.node_data = self.get_whole_node()
+        self.node_data = None
         self.index_1,self.list_title = self.init_index1_and_title()
         self.chat_engine_2 = self.init_engine_2()
         self.hybrid_engine = self.retriever_query_engine()
@@ -206,6 +210,7 @@ class VinmecRetriever:
             _type_: _string_
         """
         response_stream = self.chat_engine_2.stream_chat(question)
+        print(response_stream)
         yield "Tài liệu liên quan: \n"
         for node in response_stream.source_nodes:
             yield node.metadata['url']  + "\n"
@@ -240,7 +245,7 @@ class VinmecRetriever:
         return query_engine_
     
     
-    def hybrid_retriever_engine(self, question,):
+    def hybrid_retriever_engine(self, question):
         """_summary_
         Using hybrid search in pgvector for searching retriever from database
         
@@ -305,8 +310,7 @@ class VinmecRetriever:
         behavior = response.split("\n")[-1]
         print(behavior)
         if "SEARCH" in behavior:
-            # return rag_type(behavior.replace("SEARCH ",""))
-            return behavior.replace("SEARCH ","")
+            return rag_type(behavior.replace("SEARCH ",""))
         else:
             return behavior
         
@@ -404,26 +408,40 @@ class VinmecRetriever:
         """
         
         # query_gen_str = """
-        # Bạn là người trợ giúp hữu ích trong việc giúp xác định các mục trong danh sách dưới đây tương ứng với cùng loại bệnh như trong truy vấn của tôi.
-        # Hãy chắc chắn rằng bạn đọc tất cả chúng một cách cẩn thận.
-        # Vui lòng xem xét danh sách các mô tả bệnh tật và chỉ ra các mục mô tả cùng loại bệnh như trong câu hỏi của tôi.
-        # Chỉ mục được chọn bao gồm các mục mô tả các triệu chứng liên quan đến cùng 1 loại bệnh như được đề cập trong truy vấn. Xác định tất cả các chỉ số có liên quan.
-        # Không cần phải giải thích.
-        # Luôn trả lời số chỉ mục.
-        # Ví dụ:
-        # Hỏi: Chăm sóc và điều trị trẹo cổ?
-        # Thông tin:
-        # 1. Bị bong vẹo cổ phải làm sao?
-        # 2. Cách chăm sóc bệnh nhân ung thư tại nhà
-        # 3. Trẻ nhỏ 2-4 tuổi cũng có thể trầm cảm?
-        # 4. Chăm sóc trẻ bị viêm họng tại nhà như thế nào?,
-        # 5. Người bị trầm cảm thì nên làm gì?
-        # 6. Phát hiện và điều trị vẹo cổ ở trẻ nhỏ
-        # Chỉ số đã chọn: 1, 6
-        # Nếu không có chỉ mục tương đối thì trả về `None`.
-        # Truy vấn: {query}\n
-        # Thông tin: \n{infor}\n
-        # Chỉ số đã chọn:
+        # You are a valuable assistant in identifying indices in a list of diseases unrelated to the query. 
+        # Please make sure to carefully read through them all and understand the diseases in each entry.
+        # Please review the list of disease descriptions, organized in descending order of relevance to the query, and identify index that do not match the type of disease mentioned in my query.
+        # The number of selected indices should not exceed {max_index}.
+        # If you believe an index is not related to the disease, you may choose it. No need to provide explanations.
+        # Always respond with the index number.
+        # Example:
+        # Query: Dấu hiệu bé sẵn sàng ăn thức ăn rắn?
+        # Information:
+        # 1. Cho trẻ ăn thức ăn đặc: Những điều cần biết
+        # 2. Giúp bé làm quen với thức ăn rắn; 1. Trẻ ăn dặm bắt đầu từ khi nào?
+        # 3. Làm sao để biết trẻ bị dị ứng với thức ăn?
+        # Chỉ số đã chọn: 3
+        # If there noone index relative then return `None`.
+        # Query: {query}\n
+        # Information: \n{infor}\n
+        # Selected index:
+        # """
+        
+        # query_gen_str = """
+        # Your role is crucial in assessing the cosine similarity between the query and each index in a given list. 
+        # Make sure the cosine value returned is correct.
+        # Ensure that the number of selected indices does not surpass {max_index}.
+        # Always returns cosine value.
+        # Example:
+        # Query: Dấu hiệu bé sẵn sàng ăn thức ăn rắn?
+        # Information:
+        # 1. Cho trẻ ăn thức ăn đặc: Những điều cần biết; 1. Những dấu hiệu cho thấy bé đã sẵn sàng ăn thức ăn đặc; 2. Những dụng cụ chuẩn bị cho việc ăn thức ăn đặc; 3. Hành trình tập ăn thức ăn đặc
+        # 2. Giúp bé làm quen với thức ăn rắn; 1. Trẻ ăn dặm bắt đầu từ khi nào?; 2. Dấu hiệu con tôi đã sẵn sàng cho ăn dặm là gì?; 3. Thức ăn rắn cho trẻ; 4. Theo dõi các phản ứng dị ứng; 5. Khi trẻ bị nghẹt thở, cha mẹ cần làm gì?
+        # 3. Làm sao để biết trẻ đã sẵn sàng cho lần ăn dặm đầu tiên?; 1. Khi nào biết bé đã sẵn sàng cho lần ăn dặm đầu tiên; 2. Những dấu hiệu nhận biết bé đã “sẵn sàng” cho việc ăn dặm; 3. Các nguyên tắc cơ bản khi cho bé ăn dặm đầu tiên
+        # Selected index: 0.75, 0.65, 0.80
+        # Query: {query}\n
+        # Information: \n{infor}\n
+        # Selected index:
         # """
 
         gen = query_gen_str.format(query=question,infor=title_str, max_index= len(title))
@@ -445,53 +463,108 @@ class VinmecRetriever:
         return link_selected
     
     def create_custom_rv(self,question):
-        title,title_str = self.get_customRV(question)
-        answer = self.decide_index_retriever(question,title_str)
-        link_selected = self.get_index(answer,title)
+        title,title_str = self.google_search(question)
+        # answer = self.decide_index_retriever(question, title,title_str)
+        # link_selected = self.get_index(answer,title)
+        link_selected = [item[0] for item in title]
         if link_selected is None:
             return "Tôi hiện chưa được cập nhật thông tin này."
         else:
             return link_selected
         
     
-    def google_search(self, query):
-        list_url = []
-        data = []
-        # Tạo một yêu cầu GET đến trang tìm kiếm của Google
-        url = f"https://www.google.com/search?q={query + ' SITE vinmec.com'}"
-        # print(url)
-        response = requests.get(url)
-
-        # Kiểm tra xem yêu cầu có thành công hay không (status code 200 là thành công)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            taget = soup.find('div', class_='Gx5Zad xpd EtOod pkphOe')
-            if taget:
-                ans = taget.find_all('div', class_='kCrYT')
-                if ans and len(ans) > 1:
-                    link_ = re.split('&', ans[1].find('a').get('href').replace('/url?q=', ''))[0]
-                    # link_ = regex(ans[1].find('a').get('href').replace('/url?q=', ''))
-                    # print(link_)
-                    list_url.append(str(link_))
-
-
-            elements = soup.find_all('div', class_='egMi0 kCrYT')
-            for element in elements:
-                link_ = re.split('&', element.find('a').get('href').replace('/url?q=', ''))[0]
-                # link_ = regex(element.find('a').get('href').replace('/url?q=', ''))
-                # print(link_)
-                list_url.append(str(link_))
+    def google_search(self, query, num):
+        api_key = 'AIzaSyDLVGJ2_tbnvPAG0_W3rREBD0LTrrSQ_dg'
+        cse_id = 'a28cfff899cb04d46'
         
-        for item in list_url[0:3]:
-            content = ''
-            if 'vinmec.com' in item:
-                soup_ = BeautifulSoup(requests.get(item).text, 'html.parser')
-                content = soup_.find('h1').text.strip()
-                element = soup_.find_all('h2')
-                h2 = '; '.join([_.text.strip() for _ in element])
-                content += '; ' + h2
-                data.append([item, content])
-
-        return data
+        url = f'https://www.googleapis.com/customsearch/v1?key={api_key}&cx={cse_id}&q={query}'
+        response = requests.get(url)
+        
+        data = response.json()
+        link = [item['link'] for item in data['items']]
+        return link[:num]
     
+    #----------------PROCESS NODE FOR CUSTOM RETRIEVER----------------#
+    
+    def struct_create_node(self,node_list_):
+        node_list = []
+        for i in range(len(node_list_)):
+            data_dict = json.loads(node_list_[i][1]['_node_content'])
+            node=TextNode(
+                id_=data_dict['id_'],
+                embedding=data_dict['embedding'],
+                text=node_list_[i][0],
+                metadata=data_dict['metadata'],
+                excluded_embed_metadata_keys=data_dict['excluded_embed_metadata_keys'],
+                excluded_llm_metadata_keys=data_dict['excluded_llm_metadata_keys'],
+                hash=data_dict['hash'],
+            )
+            node.relationships[NodeRelationship.SOURCE] = RelatedNodeInfo(
+                node_id=data_dict['relationships'][NodeRelationship.SOURCE]['node_id'],
+                node_type=ObjectType(data_dict['relationships'][NodeRelationship.SOURCE]['node_type']),
+                metadata=data_dict['relationships'][NodeRelationship.SOURCE]['metadata'],
+                hash=data_dict['relationships'][NodeRelationship.SOURCE]['hash'],
+                class_name=data_dict['relationships'][NodeRelationship.SOURCE]['class_name'],
+            )
+            node.relationships[NodeRelationship.PREVIOUS] = RelatedNodeInfo(
+                node_id=data_dict['relationships'][NodeRelationship.PREVIOUS]['node_id'],
+                node_type=ObjectType(data_dict['relationships'][NodeRelationship.PREVIOUS]['node_type']),
+                metadata=data_dict['relationships'][NodeRelationship.PREVIOUS]['metadata'],
+                hash=data_dict['relationships'][NodeRelationship.PREVIOUS]['hash'],
+                class_name=data_dict['relationships'][NodeRelationship.PREVIOUS]['class_name'],
+            )
+            node.relationships[NodeRelationship.NEXT] = RelatedNodeInfo(
+                node_id=data_dict['relationships'][NodeRelationship.NEXT]['node_id'],
+                node_type=ObjectType(data_dict['relationships'][NodeRelationship.NEXT]['node_type']),
+                metadata=data_dict['relationships'][NodeRelationship.NEXT]['metadata'],
+                hash=data_dict['relationships'][NodeRelationship.NEXT]['hash'],
+                class_name=data_dict['relationships'][NodeRelationship.NEXT]['class_name'],
+            )
+            node_list.append(node)
+        return node_list
+    
+    
+    def get_final_list_nodes(self,link_selected):
+        #check if node selected is in title or content
+        # self.selected_node = []
+        # self.need_to_search = []
+        # for link in link_selected:
+        #     if link in [node.metadata['url'] for node in self.content_nodes]:
+        #         self.selected_node.append([node for node in self.content_nodes if node.metadata['url'] == link][0])
+        #     else:
+        #         self.need_to_search.append(link)
+        with self.conn.cursor() as cur:
+            for link in link_selected:
+                query = "SELECT text,metadata_,node_id FROM data_vinmec_storage_index  WHERE  metadata_::json->>'url'  = %s"
+                cur.execute(query,(link,))
+                search_nodes = cur.fetchall()
+        
+        #convert to node
+        # convert_node = self.struct_create_node(search_nodes)
+        # final_list_nodes = self.selected_node + convert_node
+        
+        final_list_nodes = self.struct_create_node(search_nodes)
+        
+        
+        return final_list_nodes
+    
+
+    def pipeline_custom_retriever(self,question):
+        link_selected = self.create_custom_rv(question)
+        final_list_nodes = self.get_final_list_nodes(link_selected)
+        storage_instance = StorageContext.from_defaults(docstore=self.index.docstore)
+        instance_vectorindex = VectorStoreIndex(final_list_nodes,storage_context=storage_instance)
+        instance_search = VectorIndexRetriever(instance_vectorindex,similarity_top_k=3)
+
+        query_engine = RetrieverQueryEngine(
+            retriever=instance_search,response_synthesizer=get_response_synthesizer(response_mode="tree_summarize",streaming=True)
+            )
+
+        query_engine = self.prompt_format(query_engine)
+        response = query_engine.query(question)
+        print(response)
+        yield "Tài liệu liên quan: \n"
+        for node in response.source_nodes:
+            yield node.metadata['url']  + "\n"
+        for text in response.response_gen:
+            yield text
