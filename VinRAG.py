@@ -25,7 +25,6 @@ from llama_index.prompts import PromptTemplate
 from concurrent.futures import ThreadPoolExecutor
 
 from llama_index.indices.postprocessor import SimilarityPostprocessor
-from llama_index.indices.postprocessor import LLMRerank
 from llama_index.indices.postprocessor import SentenceEmbeddingOptimizer
 import json
 from CustomRV import CustomRetriever
@@ -286,15 +285,17 @@ class VinmecRetriever:
         If the query contain greeting and subquery: Respond `SEARCH + combine all to one query`.
         Query: {query}
         """
+        llm = OpenAI(model="gpt-3.5-turbo-1106",temperature=0.55)
         query_ = PromptTemplate(behavior_prompt)
-        response = self.llm.predict(query_, query= question)
+        response = llm.predict(query_, query= question)
         behavior = response.split("\n")[-1]
         print(behavior)
         if "SEARCH" in behavior:
             return rag_type(behavior.replace("SEARCH ",""))
         else:
             return behavior
-        
+    
+    
     def search_link(self, link):
         query = """SELECT text
                     FROM data_vinmec_retriever_method_1
@@ -499,7 +500,8 @@ class VinmecRetriever:
         
         
         
-        #
+        #-----None of custom retriever above work well so i decide to use back hybrid and just remove duplicate and non-relevant url-----#
+        
         
         
         
