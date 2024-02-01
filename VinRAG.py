@@ -20,6 +20,10 @@ from llama_index.indices.vector_store.retrievers import VectorIndexRetriever
 from llama_index.query_engine.retriever_query_engine import (
     RetrieverQueryEngine,
 )
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import multiprocessing
 from llama_index import get_response_synthesizer
 from llama_index.prompts import PromptTemplate
 from concurrent.futures import ThreadPoolExecutor
@@ -29,6 +33,8 @@ from llama_index.indices.postprocessor import SentenceEmbeddingOptimizer
 import json
 from CustomRV import CustomRetriever
 from llama_index.schema import NodeWithScore,TextNode,NodeRelationship,ObjectType,RelatedNodeInfo
+from duckduckgo_search import DDGS #version 4.4
+
 class VinmecRetriever:
     def __init__(self, db_vector, db_root, url_pg_vector,model,api_key, table_storage_index = "vinmec_storage_index"):
         os.environ["OPENAI_API_KEY"] = api_key
@@ -43,6 +49,7 @@ class VinmecRetriever:
         self.index = self.get_index_all()
         # self.node_data = self.get_whole_node()
         # self.node_data = None
+        self.data = self.get_data()
         self.index_1,self.list_title = self.init_index1_and_title()
         self.chat_engine_2 = self.init_engine_2()
         self.hybrid_engine = self.retriever_query_engine()
@@ -380,6 +387,14 @@ class VinmecRetriever:
         
         return response
     
+    def get_data(self):
+        data = []
+        query = "SELECT text,metadata_,node_id FROM data_vinmec_storage_index"
+        with self.conn.cursor() as cursor:
+            cursor.execute(query)
+            data = cursor.fetchall()
+        return data
+    
     def google_search(self, query):
         headers = {
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -412,6 +427,40 @@ class VinmecRetriever:
         title_str = "".join([f"{i + 1}. {value[1]}\n" for i, value in enumerate(title)])
 
         return title, title_str
+    
+    def ddgo_search(self, query):
+        list_link = []
+        with DDGS() as ddgs:
+            for r in ddgs.text(f'{query} site:vinmec.com', safesearch='off', max_results=3):
+                list_link.append(r['href'])
+                
+        return list_link
+    
+    
+    def chat_with_selected_nodes(self,question):
+        print("QUESTION IS")
+        print(question)
+        list_link = self.ddgo_search(question)
+        yield "Tài liệu liên quan: \n"
+        for link in list_link:
+            yield link  + "\n"
+        node_list = []
+        for link in list_link:
+            for i in self.data:
+                if i[1]['url'] == link.replace("vi/",""):
+                    node_list.append(i)
+        selected_nodes = self.struct_create_node(node_list)
+        storage_instance = StorageContext.from_defaults(docstore=self.index.docstore)
+        instance_vectorindex = VectorStoreIndex(selected_nodes,storage_context=storage_instance)
+        instance_search = VectorIndexRetriever(instance_vectorindex,similarity_top_k=4)
+        query_engine = RetrieverQueryEngine(
+            retriever=instance_search,response_synthesizer=get_response_synthesizer(response_mode="tree_summarize",streaming=True)
+            )
+
+        query_engine = self.prompt_format(query_engine)
+        response = query_engine.query(question)
+        for text in response.response_gen:
+            yield text
     
     
     def get_index(self,answer,title):

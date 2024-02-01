@@ -1,3 +1,4 @@
 streamlit
 bs4
 langchain
+duckduckgo-search==4.4
