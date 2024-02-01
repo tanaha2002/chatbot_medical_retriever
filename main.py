@@ -135,7 +135,6 @@ def append_message(content, role="assistant", display=False):
 
 api_url=st.secrets['api_url']
 def get_response(question, method):
-    print(model)
     response = requests.get(
         f"{api_url}/{method}", 
         params={"question": question}, 

@@ -291,6 +291,7 @@ class VinmecRetriever:
         response = self.llm.predict(query_, query= question)
         
         behavior = response.split("\n")[-1]
+        print(behavior)
         if "SEARCH" in behavior:
             return rag_type(behavior.replace("SEARCH ",""))
         else:
