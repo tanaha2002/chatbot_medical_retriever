@@ -40,8 +40,9 @@ st.title("Vinmec Retrieval")
 st.caption("Hỏi đáp dựa trên nguồn dữ liệu của Vinmec")
 options = [
     # ("✨ Chat Engine 1", "chat_engine"),
-    ("🦆 DuckDuckGo Search", "chat_engine_2"),
+    # ("🦆 DuckDuckGo Search", "chat_engine_2"),
     ("⛰️ Hybrid Engine", "hybrid_engine")
+    ("🦆 Search Engine", "chat_engine_2"),
 ]
 model = st.radio(
     "",
