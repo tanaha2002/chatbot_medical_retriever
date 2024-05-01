@@ -17,3 +17,6 @@ The project consists of the following main components:
 5. **Inference and Deployment**: The complete RAG pipeline was optimized and deployed to a production environment, allowing users to interact with the medical chatbot seamlessly.
 
 ## Demo
+
+https://github.com/tanaha2002/chatbot_medical_retriever/assets/98084807/609af555-9d68-4276-b3e7-88ef40a94f21
+
